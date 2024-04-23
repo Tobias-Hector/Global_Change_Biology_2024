@@ -1,0 +1,16 @@
+
+    model{
+    
+    ## Priors
+    beta ~ dnorm(0, 0.000001)
+    
+    ## Likelihood
+    for(i in 1:N.obs){
+    Num.uninf[i] ~ dbin(prob[i], Num[i])
+    prob[i] <- exp(-beta * 2000 * 20 * 3 * 0.00001) 
+    # 120000 total spore days = 2000 sp/ml x 20 ml x 3 day exposure
+    # the beta parameter value is transformed by x 10^-5 to make fitting easier - need to transform output later
+    }
+    
+    } # close model
+    

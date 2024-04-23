@@ -1,0 +1,427 @@
+---
+title: "Plotting"
+---
+
+```{r}
+library(tidyverse)
+library(cowplot)
+```
+
+# Heat tolerance
+
+data
+
+```{r}
+heat_data <- read_csv("../data/final_heat_data.csv",
+                      col_names = TRUE,
+                      col_types = list(host = col_factor(NULL),
+                                       pathogen = col_factor(levels = c("CTRL", "C1", "C14", "C20")),
+                                       temp_treat = col_factor(levels = c("20-20", "25-20", "20-25", "25-25")),
+                                       acc_temp = col_factor(levels = c("20", "25")),
+                                       mat_temp = col_factor(levels = c("20", "25")),
+                                       exposed = col_factor(NULL),
+                                       run = col_factor(NULL))) %>%
+  mutate(Pathogen = pathogen)
+
+heat_data
+```
+
+#Legend for plotting
+
+```{r include=FALSE,fig.height=2, fig.width=3}
+fig_legend_plot <- ggplot(pheno_data, aes(x = acc_temp, y = total_offspring, col = Pathogen, shape = Pathogen, linetype = Pathogen)) +
+  geom_line(size = 0.6, alpha = 0.8) +
+  geom_point(size = 2.8, stroke = 1) +
+  scale_colour_manual(values = c("#008000", "#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(1,2,4,5)) +
+  scale_shape_manual(values = c(6,1,2,0)) +
+  theme_bw() +
+  theme(legend.title = element_text(size = 12), legend.text = element_text(size = 11))
+
+#Legend at bottom
+figure_legend <- get_legend(fig_legend_plot + 
+                             guides(pathogen = guide_legend(nrow = 2)) +
+                               theme(legend.position = "bottom"))
+```
+
+Figure 1:
+
+```{r message=FALSE, warning=FALSE}
+heat_plot<- heat_data %>% 
+  group_by(mat_temp, acc_temp, Pathogen) %>%
+  summarise(ave = mean(death_time, na.rm = TRUE),
+            n = n(),
+            sd = sd(death_time, na.rm = TRUE),
+            se = sd/sqrt(n)) %>%
+  ggplot(aes(x = acc_temp, y = ave, group = Pathogen, color = Pathogen)) +
+  geom_point(aes(shape = Pathogen), position = position_dodge(0.2), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = Pathogen), position = position_dodge(0.2), size = 0.8) +
+  geom_errorbar(aes(ymin = ave-se, ymax = ave+se), width = 0.3, position = position_dodge(0.2), size = 0.6) +
+  scale_colour_manual(values = c("#008000", "#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(1,2,4,5)) +
+  scale_shape_manual(values = c(6,1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(heat_data$mat_temp)[mat_temp])*degree*C)) +
+  labs(y = "Knockdown time (mins ± SE)", x = expression(Focal~Temperature~(degree*C))) +
+  theme_bw() +
+  theme(legend.position = "bottom", legend.title = element_blank())
+
+heat_plot
+```
+
+```{r}
+ggsave('../figures/Figure_1.pdf', width = 80, height = 80, units = "mm")
+```
+
+
+# Age specific fecundity
+
+data
+
+```{r}
+age_fecund_data <- read_csv("../data/full_offspring_data.csv",
+                            col_names = TRUE,
+                            col_types = list(acc_temp = col_factor()))
+```
+
+Supplimentary Figure 1:
+
+```{r}
+age_fecund_data %>%
+  filter(pathogen == "CTRL", temp_treat %in% c("20-20", "20-25")) %>%
+  ggplot(aes(x = host_age, y = offspring, group = indv_id, colour = acc_temp)) +
+  geom_line() +
+  coord_cartesian(xlim = c(0,120)) +
+  scale_colour_manual(values = c("#264AF5","#ea5f94")) +
+  theme_bw() +
+  labs(x = "Host Age (days)", y = "No. Offspring", colour = "Focal\nTemperature")
+```
+
+```{r}
+ggsave('../figures/Figure_S1.pdf', width = 169, height = 100, units = "mm")
+```
+
+#Phenotype finess data
+
+```{r}
+pheno_data <- read_csv("../data/final_phenotype_data.csv",
+                      col_names = TRUE,
+                      col_types = list(host = col_factor(NULL),
+                                       pathogen = col_factor(levels = c("CTRL", "C1", "C14", "C20")),
+                                       temp_treat = col_factor(levels = c("20-20", "25-20", "20-25", "25-25")),
+                                       mat_temp = col_factor(levels = c("20", "25")),
+                                       acc_temp = col_factor(levels = c("20", "25")),
+                                       exposed = col_factor(NULL),
+                                       infected = col_factor(NULL))) %>%
+  mutate(Pathogen = pathogen)
+
+pheno_data
+```
+
+Lifespan panel
+
+```{r message=FALSE}
+lifespan_plot <- pheno_data %>% 
+  group_by(mat_temp, acc_temp, Pathogen) %>%
+  summarise(ave = mean(lifespan_days, na.rm = TRUE),
+            n = n(),
+            sd = sd(lifespan_days, na.rm = TRUE),
+            se = sd/sqrt(n)) %>%
+  ggplot(aes(x = acc_temp, y = ave, group = Pathogen, color = Pathogen)) +
+  geom_point(aes(shape = Pathogen), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = Pathogen), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = ave-se, ymax = ave+se), width = 0.3, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#008000", "#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(1,2,4,5)) +
+  scale_shape_manual(values = c(6,1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(y = "Lifespan (days ± SE)", x = expression(Focal~Temperature~(degree*C)))
+
+lifespan_plot
+```
+
+Fecundity
+
+```{r message=FALSE}
+fecundity_plot <- pheno_data %>% 
+  group_by(mat_temp, acc_temp, Pathogen) %>%
+  summarise(ave = mean(total_offspring, na.rm = TRUE),
+            n = n(),
+            sd = sd(total_offspring, na.rm = TRUE),
+            se = sd/sqrt(n)) %>%
+  ggplot(aes(x = acc_temp, y = ave, group = Pathogen, color = Pathogen)) +
+  geom_point(aes(shape = Pathogen), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = Pathogen), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = ave-se, ymax = ave+se), width = 0.3, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#008000", "#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(1,2,4,5)) +
+  scale_shape_manual(values = c(6,1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(y = "Lifetime fecundity (± SE)", x = expression(Focal~Temperature~(degree*C)))
+
+fecundity_plot
+```
+
+Mature spore loads
+```{r message=FALSE}
+spore_plot_raw <- pheno_data %>% filter(exposed == "Y" & infected == "M") %>%
+  mutate(mature_spores_mil = mature_spores/1000000) %>%
+  group_by(mat_temp, acc_temp, Pathogen) %>%
+  summarise(ave = mean(mature_spores_mil, na.rm = TRUE),
+            n = n(),
+            sd = sd(mature_spores_mil, na.rm = TRUE),
+            se = sd/sqrt(n)) %>%
+  ggplot(aes(x = acc_temp, y = ave, group = Pathogen, color = Pathogen)) +
+  geom_point(aes(shape = Pathogen), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = Pathogen), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = ave-se, ymax = ave+se), width = 0.3, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(2,4,5)) +
+  scale_shape_manual(values = c(1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(y = "Spore loads (million ± SE)", x = expression(Focal~Temperature~(degree*C)))
+
+spore_plot_raw
+```
+
+infection prob data
+
+```{r}
+infection_prob_data <- read_csv("../data/infection_prob_data.csv", col_names = TRUE,
+                                col_types = list(treat_temp = col_factor(NULL), 
+                                                 mat_temp = col_factor(levels = c("20", "25")),
+                                                 acc_temp = col_factor(levels = c("20", "25")),
+                                                 pathogen = col_factor(levels = c("C1", "C14", "C20")),
+                                                 infected = col_factor(levels = c("all_spores", "mature_spores")))) %>%
+  mutate(Pathogen = pathogen)
+```
+
+Mature spore infection rate
+```{r message=FALSE}
+inf_prob_plot <- infection_prob_data %>%
+  ggplot(aes(x = acc_temp, y = prob, colour = Pathogen, group = Pathogen)) +
+  geom_point(aes(shape = Pathogen), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = Pathogen), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = prob-SE, ymax = prob+SE), width = 0.3, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(2,4,5)) +
+  scale_shape_manual(values = c(1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(y = "Infection rate (± SE)", x = expression(Focal~Temperature~(degree*C)))
+
+inf_prob_plot
+```
+
+
+
+pathogen fitness plot
+```{r}
+plots_align <- plot_grid(lifespan_plot, fecundity_plot, inf_prob_plot, spore_plot_raw, align = "hv", nrow = 2, labels = c("(a)", "(b)", "(c)", "(d)"), label_size = 11, label_fontface  = "bold.italic", hjust = -1.5, vjust = 2)
+
+pheno_full <- plot_grid(plots_align, figure_legend, ncol = 1, rel_heights = c(4,0.2))
+
+
+ggsave2("../figures/Figure_2.pdf", plot = pheno_full, width = 169, height = 150, units = "mm")
+```
+
+
+
+#Derived parameter JAGS posterior plots
+
+birth and death rate data
+```{r}
+ctrl_jags_data <- read_csv("../data/JAGS_birth_death_post_full.csv", col_names = TRUE,
+                           col_types = list(temp_treat = col_factor(levels = c("20-20", "20-25", "25-20", "25-25")))) 
+```
+
+derived parameters inc. R0 data
+```{r}
+R0_jags_data <- read_csv("../data/JAGS_R0_derived_post_full.csv", col_names = TRUE,
+                         col_types = list(temp_treat = col_factor(levels = c("20-20", "20-25", "25-20", "25-25")),
+                                          treatment = col_factor(NULL)))
+```
+
+Summary data for plotting host dynamics
+```{r}
+host_dynamics_sum <- ctrl_jags_data %>%
+  separate(temp_treat, c("mat_temp", "acc_temp"), sep = "-", convert = FALSE, remove = FALSE) %>%
+  mutate(mat_temp = as_factor(mat_temp), acc_temp = as_factor(acc_temp)) %>%
+  mutate(b_d_contr = (little_b - little_d)/little_b) %>%
+  group_by(temp_treat, mat_temp, acc_temp) %>%
+  summarise(mean_r = mean(little_r),
+            lowerCI_r = quantile(little_r, 0.025),
+            upperCI_r = quantile(little_r, 0.975),
+            mean_d = mean(little_d),
+            lowerCI_d = quantile(little_d, 0.025),
+            upperCI_d = quantile(little_d, 0.975),
+            mean_b = mean(little_b),
+            lowerCI_b = quantile(little_b, 0.025),
+            upperCI_b = quantile(little_b, 0.975),
+            mean_bd_contr = mean(b_d_contr),
+            lowerCI_bd_contr = quantile(b_d_contr, 0.025),
+            upperCI_bd_contr = quantile(b_d_contr, 0.975))
+
+host_dynamics_sum
+```
+
+Intrinsic growth plot (little r)
+```{r message=FALSE}
+little_r_plot <- host_dynamics_sum %>%
+  ggplot(aes(x = acc_temp, y = mean_r, group = mat_temp, colour = mat_temp)) +
+  geom_point(aes(shape = mat_temp), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = mat_temp), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = lowerCI_r, ymax = upperCI_r), width = 0.3, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#008000", "#008000"), name="Maternal\nTemp") +
+  scale_shape_manual(values = c(6,6), name="Maternal\nTemp") +
+  scale_linetype_manual(values = c(1, 1), name="Maternal\nTemp") +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(y = expression(Host~italic(r[m])~(day^-1)), x = expression(Focal~Temperature~(degree*C)))
+  
+  
+little_r_plot
+```
+
+
+Host death rate
+```{r message=FALSE, warning=FALSE}
+little_d_plot <- host_dynamics_sum %>%
+  ggplot(aes(x = acc_temp, y = mean_d, group = mat_temp, colour = mat_temp)) +
+  geom_point(aes(shape = mat_temp), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = mat_temp), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = lowerCI_d, ymax = upperCI_d), width = 0.3, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#008000", "#008000"), name="Maternal\nTemp") +
+  scale_shape_manual(values = c(6,6), name="Maternal\nTemp") +
+  scale_linetype_manual(values = c(1, 1), name="Maternal\nTemp") +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(y = expression(Host~Death~Rate~(d~~day^-1)), x = expression(Focal~Temperature~(degree*C))) +
+  coord_cartesian(ylim = c(0, 0.15))
+  
+  
+little_d_plot
+```
+
+Host (b-d)/b rate
+```{r message=FALSE, warning=FALSE}
+little_bd_ctr_plot <- host_dynamics_sum %>%
+  ggplot(aes(x = acc_temp, y = mean_bd_contr, group = mat_temp, colour = mat_temp)) +
+  geom_point(aes(shape = mat_temp), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = mat_temp), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = lowerCI_bd_contr, ymax = upperCI_bd_contr), width = 0.3, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#008000", "#008000"), name="Maternal\nTemp") +
+  scale_shape_manual(values = c(6,6), name="Maternal\nTemp") +
+  scale_linetype_manual(values = c(1, 1), name="Maternal\nTemp") +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(y = "Host (b - d)/b", x = expression(Focal~Temperature~(degree*C))) +
+  coord_cartesian(ylim = c(0.85, 1))
+  
+  
+little_bd_ctr_plot
+```
+
+
+Summary data for disease dynamics
+```{r}
+inf_dynamics_sum <- R0_jags_data %>%
+  separate(treatment, c("pathogen", "mat_temp", "acc_temp"), sep = "-", convert = FALSE, remove = FALSE) %>%
+  mutate(Pathogen = as_factor(pathogen), mat_temp = as_factor(mat_temp), acc_temp = as_factor(acc_temp)) %>%
+  group_by(treatment, Pathogen, mat_temp, acc_temp) %>%
+  summarise(mean_beta = mean(beta),
+            median_beta = median(beta),
+            lower_beta = quantile(beta, 0.025),
+            upper_beta = quantile(beta, 0.975),
+            mean_spores = mean(spore_load)/1000000,
+            median_spores = median(spore_load)/1000000,
+            lower_spores = quantile(spore_load, 0.025)/1000000,
+            upper_spores = quantile(spore_load, 0.975)/1000000,
+            mean_R0 = mean(R0),
+            median_R0 = median(R0),
+            lower_R0 = quantile(R0, 0.025),
+            upper_R0 = quantile(R0, 0.975),
+            mean_R0_log = log10(mean(R0)),
+            median_R0_log = log10(median(R0)),
+            lower_R0_log = log10(quantile(R0, 0.025)),
+            upper_R0_log = log10(quantile(R0, 0.975))) %>%
+  mutate(lower_R0_log = replace_na(lower_R0_log, 0))
+  
+inf_dynamics_sum
+```
+
+
+Beta plot (transmission rate)
+```{r message=FALSE, warning=FALSE}
+beta_plot <- inf_dynamics_sum %>%
+  ggplot(aes(x = acc_temp, y = mean_beta*1000000, group = Pathogen, color = Pathogen)) +
+ geom_point(aes(shape = mat_temp), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = mat_temp), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = lower_beta*1000000, ymax = upper_beta*1000000), width = 0.2, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(2,4,5)) +
+  scale_shape_manual(values = c(1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = 'none', axis.title.y = element_text(size = 10)) +
+  labs(y = expression("Trans. Rate"~(beta~x~10^-6~~L~spore^-1~day^-1)), x = expression(Focal~Temperature~(degree*C)))
+
+beta_plot
+```
+
+spore load plot sigma
+```{r message=FALSE, warning=FALSE}
+spore_plot <- inf_dynamics_sum %>%
+  ggplot(aes(x = acc_temp, y = mean_spores, group = Pathogen, color = Pathogen)) +
+ geom_point(aes(shape = Pathogen), position = position_dodge(0.3), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = Pathogen), position = position_dodge(0.3), size = 0.8) +
+  geom_errorbar(aes(ymin = lower_spores, ymax = upper_spores), width = 0.2, position = position_dodge(0.3), size = 0.6) +
+  scale_colour_manual(values = c("#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(2,4,5)) +
+  scale_shape_manual(values = c(1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(y = expression(Spore~Loads~(sigma~~x~10^6)), x = expression(Focal~Temperature~(degree*C)))
+
+spore_plot
+```
+
+
+R0 
+
+```{r message=FALSE}
+R0_log_plot <- inf_dynamics_sum %>%
+  ggplot(aes(x = acc_temp, y = median_R0_log, group = Pathogen, color = Pathogen)) +
+ geom_point(aes(shape = Pathogen), position = position_dodge(0.4), size = 2, stroke = 0.8) +
+  geom_line(aes(linetype = Pathogen), position = position_dodge(0.4), size = 0.8) +
+  geom_errorbar(aes(ymin = lower_R0_log, ymax = upper_R0_log), width = 0.3, position = position_dodge(0.4), size = 0.6) +
+  scale_colour_manual(values = c("#e55326","#5e3096","#e72a8a")) +
+  scale_linetype_manual(values = c(2,4,5)) +
+  scale_shape_manual(values = c(1,2,0)) +
+  facet_wrap(.~mat_temp, nrow = 1, labeller = label_bquote(.(levels(pheno_data$mat_temp)[mat_temp])*degree*C)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(y = expression(Pathogen~italic(R[0])~~(Log[10])), x = expression(Focal~Temperature~(degree*C)))
+
+R0_log_plot
+```
+
+```{r}
+population_traits_align <- plot_grid(little_r_plot, R0_log_plot, little_d_plot, beta_plot, little_bd_ctr_plot, spore_plot, align = "hv", nrow = 3, labels = c("(a)", "(b)", "(c)", "(d)", "(e)", "(f)"), label_size = 11, label_fontface  = "bold.italic", hjust = -1.5, vjust = 2)
+
+pheno_full <- plot_grid(population_traits_align, figure_legend, ncol = 1, rel_heights = c(4,0.2))
+
+
+ggsave2("../figures/Figure_3.pdf", plot = pheno_full, width = 169, height = 200, units = "mm")
+```
+

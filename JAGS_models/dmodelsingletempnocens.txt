@@ -1,0 +1,13 @@
+
+    model{
+    
+    ## Priors
+    d ~ dunif(0, 1)
+    
+    ## Likelihood
+    for(i in 1:N.obs.d){
+    death[i] ~ dexp(d)
+    }
+    
+    } # close model
+    

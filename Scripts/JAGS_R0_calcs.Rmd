@@ -1,0 +1,878 @@
+---
+title: "JAGS analysis of population parameters"
+---
+
+Load packages
+```{r}
+library(tidyverse)
+library(R2jags)
+library("mcmcplots")
+```
+
+##Load data: lifetable data
+```{r}
+pheno_data0 <- read_csv("../data/final_phenotype_data.csv",
+                       col_names = TRUE,
+                       col_types = list(host = col_factor(NULL),
+                                        pathogen = col_factor(levels = c("CTRL", "C1", "C14", "C20")),
+                                        temp_treat = col_factor(levels = c("20-20", "25-20", "20-25", "25-25")),
+                                        mat_temp = col_factor(levels = c("20", "25")),
+                                        acc_temp = col_factor(levels = c("20", "25")),
+                                        treatment = col_factor(NULL),
+                                        exposed = col_factor(NULL),
+                                        infected = col_factor(NULL)))
+
+pheno_data <- pheno_data0 %>%
+  filter(!is.na(death_date)) %>%
+  mutate(status = 1)
+
+glimpse(pheno_data)
+```
+
+##Load data: data for intrinsic growth rate calculations
+```{r}
+#data for calculating intrinsic growth rate
+offspring_cum <- read_csv(file = "../data/full_offspring_data.csv",
+                          col_names = TRUE,
+                          col_types = list(host = col_factor(NULL),
+                                           pathogen = col_factor(NULL),
+                                           mat_temp = col_factor(NULL),
+                                           acc_temp = col_factor(NULL),
+                                           exposed = col_factor(NULL),
+                                           birth_date = col_date("%Y-%m-%d"),
+                                           inf_date = col_date("%Y-%m-%d")))
+
+glimpse(offspring_cum)
+```
+
+##MCMC settings
+```{r}
+##### MCMC Settings
+ni <- 75000
+nb <- 30000
+nt <- 16
+nc <- 3
+```
+
+#####
+##Death rate (little d) of uninfected hosts - observed all hosts die so no censor date needed
+#####
+
+#Subset data
+```{r}
+d_data_ctrl2020 <- subset(pheno_data, treatment == "CTRL-20-20")
+d_data_ctrl2025 <- subset(pheno_data, treatment == "CTRL-20-25")
+d_data_ctrl2520 <- subset(pheno_data, treatment == "CTRL-25-20")
+d_data_ctrl2525 <- subset(pheno_data, treatment == "CTRL-25-25")
+```
+
+
+#Model
+```{r}
+sink("../JAGS_models/dmodelsingletempnocens.txt")
+cat("
+    model{
+    
+    ## Priors
+    d ~ dunif(0, 1)
+    
+    ## Likelihood
+    for(i in 1:N.obs.d){
+    death[i] ~ dexp(d)
+    }
+    
+    } # close model
+    ",fill=T)
+sink()
+
+```
+
+#Parameters to Estimate
+```{r}
+parameters <- c("d")
+```
+
+#Inits Function
+```{r}
+inits<-function(){list(
+  d = 0.01)}
+```
+
+
+2020 treatments
+```{r}
+#Organize Data for JAGS - store data and run model for one temp at a time
+death <- d_data_ctrl2020$lifespan_days 
+
+#Length
+N.obs.d <- length(death) 
+
+#Bundle Data
+jag.data<-list(
+  death = death,
+  N.obs.d = N.obs.d) 
+
+#Run JAGS 
+d_2020_out<-jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/dmodelsingletempnocens.txt",
+                n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+```
+
+2025 treatments
+```{r}
+death <- d_data_ctrl2025$lifespan_days
+
+#Length
+N.obs.d <- length(death) 
+
+#Bundle Data
+jag.data<-list(
+  death = death,
+  N.obs.d = N.obs.d) 
+
+
+d_2025_out<-jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/dmodelsingletempnocens.txt",
+                n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+
+
+```
+
+2520 treatments
+```{r}
+death <- d_data_ctrl2520$lifespan_days
+
+#Length
+N.obs.d <- length(death) 
+
+#Bundle Data
+jag.data<-list(
+  death = death,
+  N.obs.d = N.obs.d) 
+
+d_2520_out<-jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/dmodelsingletempnocens.txt",
+                n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+```
+
+2525 treatments
+```{r}
+death <- d_data_ctrl2525$lifespan_days
+
+#Length
+N.obs.d <- length(death) 
+
+#Bundle Data
+jag.data<-list(
+  death = death,
+  N.obs.d = N.obs.d) 
+
+
+d_2525_out<-jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/dmodelsingletempnocens.txt",
+                n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+```
+
+#Summary of output
+```{r}
+d_2020_out$BUGSoutput$summary
+d_2025_out$BUGSoutput$summary
+d_2520_out$BUGSoutput$summary
+d_2525_out$BUGSoutput$summary
+```
+
+#Check diagnostics
+```{r}
+mcmcplot(d_2020_out)
+mcmcplot(d_2025_out)
+mcmcplot(d_2520_out)
+mcmcplot(d_2525_out)
+```
+
+#Save summary data for each treatment
+```{r}
+JAGS_little_d_summary <- data.frame(temp_treat = c("20-20", "20-25", "25-20", "25-25"),
+                                    median = c(median(d_2020_out$BUGSoutput$sims.list$d), median(d_2025_out$BUGSoutput$sims.list$d), median(d_2520_out$BUGSoutput$sims.list$d), median(d_2525_out$BUGSoutput$sims.list$d)), 
+                                    mean = c(d_2020_out$BUGSoutput$summary[1, 1], d_2025_out$BUGSoutput$summary[1, 1], d_2520_out$BUGSoutput$summary[1, 1], d_2525_out$BUGSoutput$summary[1, 1]),
+                                    lower = c(d_2020_out$BUGSoutput$summary[1, 3], d_2025_out$BUGSoutput$summary[1, 3], d_2520_out$BUGSoutput$summary[1, 3], d_2525_out$BUGSoutput$summary[1, 3]),
+                                    upper = c(d_2020_out$BUGSoutput$summary[1, 7], d_2025_out$BUGSoutput$summary[1, 7], d_2520_out$BUGSoutput$summary[1, 7], d_2525_out$BUGSoutput$summary[1, 7]))
+
+JAGS_little_d_summary
+```
+
+#Save fits for later calculations
+```{r}
+JAGS_little_d_2020 <- data.frame(little_d = d_2020_out$BUGSoutput$sims.list$d)
+JAGS_little_d_2025 <- data.frame(little_d = d_2025_out$BUGSoutput$sims.list$d)
+JAGS_little_d_2520 <- data.frame(little_d = d_2520_out$BUGSoutput$sims.list$d)
+JAGS_little_d_2525 <- data.frame(little_d = d_2525_out$BUGSoutput$sims.list$d)
+```
+
+
+
+
+#####
+##Intrinsic rate of growth
+#####
+
+First calculate little r for each individual
+
+#Function for calculating intrinsic growth rate per individual for nested data
+```{r}
+# First write a contained function that works on a test df
+# Coudl be much better, to allow for varying column names. But good enough.
+fnc_el_uni <- function(df){
+  
+  r_range <- c(0, 5) 
+  x_test <- c(df$host_age) 
+  L_test <- c(df$alive_dead_status) 
+  m_test <- c(df$offspring) 
+  
+  eulerlotka <- function(r) sum(L_test * m_test * exp(-r * x_test)) - 1 
+  res <- uniroot(f = eulerlotka, interval = r_range, tol = 1e-8) 
+  solution <- (res$root)
+  
+  solution
+  
+}
+```
+
+#subset and nest data
+```{r}
+ctrl_2020_nest <- offspring_cum %>% filter(pathogen == "CTRL", temp_treat == "20-20") %>%
+  mutate(alive_dead_status = as.numeric(case_when(alive_dead == "ALIVE" ~ 1, alive_dead == "DEAD" ~ 0))) %>%
+  select(indv_id, offspring, host_age, alive_dead_status) %>%
+  group_by(indv_id) %>%
+  nest()
+
+ctrl_2025_nest <- offspring_cum %>% filter(pathogen == "CTRL", temp_treat == "20-25") %>%
+  mutate(alive_dead_status = as.numeric(case_when(alive_dead == "ALIVE" ~ 1, alive_dead == "DEAD" ~ 0))) %>%
+  select(indv_id, offspring, host_age, alive_dead_status) %>%
+  group_by(indv_id) %>%
+  nest()
+
+ctrl_2520_nest <- offspring_cum %>% filter(pathogen == "CTRL", temp_treat == "25-20") %>%
+  mutate(alive_dead_status = as.numeric(case_when(alive_dead == "ALIVE" ~ 1, alive_dead == "DEAD" ~ 0))) %>%
+  select(indv_id, offspring, host_age, alive_dead_status) %>%
+  group_by(indv_id) %>%
+  nest()
+
+ctrl_2525_nest <- offspring_cum %>% filter(pathogen == "CTRL", temp_treat == "25-25") %>%
+  mutate(alive_dead_status = as.numeric(case_when(alive_dead == "ALIVE" ~ 1, alive_dead == "DEAD" ~ 0))) %>%
+  select(indv_id, offspring, host_age, alive_dead_status) %>%
+  group_by(indv_id) %>%
+  nest()
+```
+
+#little r calcs
+```{r}
+little_r_2020 <- ctrl_2020_nest %>%
+  mutate(little_r = map_dbl(data, fnc_el_uni)) %>%
+  unnest(cols = little_r) %>%
+  select(- data)
+
+mean(little_r_2020$little_r)
+```
+
+```{r}
+little_r_2025 <- ctrl_2025_nest %>%
+  mutate(little_r = map_dbl(data, fnc_el_uni)) %>%
+  unnest(cols = little_r) %>%
+  select(- data)
+
+mean(little_r_2025$little_r)
+```
+
+```{r}
+little_r_2520 <- ctrl_2520_nest %>%
+  mutate(little_r = map_dbl(data, fnc_el_uni)) %>%
+  unnest(cols = little_r) %>%
+  select(- data)
+
+mean(little_r_2520$little_r)
+```
+
+```{r}
+little_r_2525 <- ctrl_2525_nest %>%
+  mutate(little_r = map_dbl(data, fnc_el_uni)) %>%
+  unnest(cols = little_r) %>%
+  select(- data)
+
+mean(little_r_2525$little_r)
+```
+
+#jags
+#General model for a normally distributed trait (for spores and r)
+```{r}
+sink("../JAGS_models/traitmumodelsingletemp.txt")
+cat("
+    model{
+    
+    ## Priors
+    trait.mu ~ dnorm(0, 1/1000000000000)
+    trait.sigma ~ dunif(0, 1000)
+    trait.tau <- 1 / (trait.sigma * trait.sigma)
+    
+    ## Likelihood
+    for(i in 1:N.obs.trait){
+    trait[i] ~ dnorm(trait.mu, trait.tau)
+    }
+    
+    } # close model
+    ",fill=T)
+sink()
+```
+
+#Parameters to Estimate
+```{r}
+parameters <- c("trait.mu", "trait.sigma")
+```
+
+# Inits Function
+```{r}
+inits<-function(){list(
+  trait.mu = runif(1, 0, 1),
+  trait.sigma = rlnorm(1))}
+```
+
+2020
+```{r}
+trait <- little_r_2020$little_r
+N.obs.trait <- length(trait)
+jag.data<-list(
+  trait = trait,
+  N.obs.trait = N.obs.trait)
+
+r_2020_out <- jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/traitmumodelsingletemp.txt",
+                 n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+
+```
+
+2025
+```{r}
+trait <- little_r_2025$little_r
+N.obs.trait <- length(trait)
+jag.data<-list(
+  trait = trait,
+  N.obs.trait = N.obs.trait)
+
+r_2025_out <- jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/traitmumodelsingletemp.txt",
+                 n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+
+```
+
+2520
+```{r}
+trait <- little_r_2520$little_r
+N.obs.trait <- length(trait)
+jag.data<-list(
+  trait = trait,
+  N.obs.trait = N.obs.trait)
+
+r_2520_out <- jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/traitmumodelsingletemp.txt",
+                 n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+```
+
+2525
+```{r}
+trait <- little_r_2525$little_r
+N.obs.trait <- length(trait)
+jag.data<-list(
+  trait = trait,
+  N.obs.trait = N.obs.trait)
+
+r_2525_out <- jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/traitmumodelsingletemp.txt",
+                 n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+```
+
+#Summary
+```{r}
+r_2020_out$BUGSoutput$summary
+r_2025_out$BUGSoutput$summary
+r_2520_out$BUGSoutput$summary
+r_2525_out$BUGSoutput$summary
+```
+
+#Diagnostics
+```{r}
+mcmcplot(r_2020_out)
+mcmcplot(r_2025_out)
+mcmcplot(r_2520_out)
+mcmcplot(r_2525_out)
+```
+
+#Save summary for plotting etc
+```{r}
+JAGS_little_r_summary <- data.frame(temp_treat = c("20-20", "20-25", "25-20", "25-25"),
+                                    median = c(median(r_2020_out$BUGSoutput$sims.list$trait.mu), median(r_2025_out$BUGSoutput$sims.list$trait.mu), median(r_2520_out$BUGSoutput$sims.list$trait.mu), median(r_2525_out$BUGSoutput$sims.list$trait.mu)),
+                                    mean = c(r_2020_out$BUGSoutput$summary[2, 1], r_2025_out$BUGSoutput$summary[2, 1], r_2520_out$BUGSoutput$summary[2, 1], r_2525_out$BUGSoutput$summary[2, 1]),
+                                    lower = c(r_2020_out$BUGSoutput$summary[2, 3], r_2025_out$BUGSoutput$summary[2, 3], r_2520_out$BUGSoutput$summary[2, 3], r_2525_out$BUGSoutput$summary[2, 3]),
+                                    upper = c(r_2020_out$BUGSoutput$summary[2, 7], r_2025_out$BUGSoutput$summary[2, 7], r_2520_out$BUGSoutput$summary[2, 7], r_2525_out$BUGSoutput$summary[2, 7]))
+
+JAGS_little_r_summary
+```
+
+#Save JAGS output for later R0 trait calcs
+```{r}
+JAGS_little_r_2020 <- data.frame(little_r = r_2020_out$BUGSoutput$sims.list$trait.mu)
+JAGS_little_r_2025 <- data.frame(little_r = r_2025_out$BUGSoutput$sims.list$trait.mu)
+JAGS_little_r_2520 <- data.frame(little_r = r_2520_out$BUGSoutput$sims.list$trait.mu)
+JAGS_little_r_2525 <- data.frame(little_r = r_2525_out$BUGSoutput$sims.list$trait.mu)
+```
+
+
+
+
+
+#####
+##Transmission rate (beta)
+#####
+
+#transmission data
+#wrangle data to get numbers of infected, uninfected and total for beta calcs
+
+#total number for each treatment
+```{r}
+total_n <- pheno_data %>%
+  filter(!is.na(infected)) %>%
+  group_by(treatment) %>%
+  summarise(Total = n())
+```
+
+#total infected for each treatment 
+```{r}
+inf_n <- pheno_data %>%
+  filter(!is.na(infected)) %>%
+  filter(infected != "N") %>%
+  filter(infected != "P") %>%
+  group_by(treatment) %>%
+  summarise(Infe = n())
+```
+
+#merging and calculating number of uninfected animals in each treatment
+```{r}
+inf_prev_data <- total_n %>% left_join(inf_n, by = "treatment") %>%
+  mutate(Uninf = Total - Infe)
+```
+
+#Changing C20-20-20 so it isnt 100% infection rate - making one individual uninfected
+```{r}
+inf_prev_data[3,4] <- 1
+inf_prev_data[3,3] <- 16
+inf_prev_data 
+```
+
+#subset transmission rate data by treatment
+```{r}
+beta_data_C12020 <- subset(inf_prev_data, treatment == "C1-20-20")
+beta_data_C12025 <- subset(inf_prev_data, treatment == "C1-20-25")
+beta_data_C12520 <- subset(inf_prev_data, treatment == "C1-25-20")
+beta_data_C12525 <- subset(inf_prev_data, treatment == "C1-25-25")
+beta_data_C142020 <- subset(inf_prev_data, treatment == "C14-20-20")
+beta_data_C142025 <- subset(inf_prev_data, treatment == "C14-20-25")
+beta_data_C142520 <- subset(inf_prev_data, treatment == "C14-25-20")
+beta_data_C142525 <- subset(inf_prev_data, treatment == "C14-25-25")
+beta_data_C202020 <- subset(inf_prev_data, treatment == "C20-20-20")
+beta_data_C202025 <- subset(inf_prev_data, treatment == "C20-20-25")
+beta_data_C202520 <- subset(inf_prev_data, treatment == "C20-25-20")
+beta_data_C202525 <- subset(inf_prev_data, treatment == "C20-25-25")
+```
+
+
+# Model
+```{r}
+sink("../JAGS_models/betamodelsingletemp.txt")
+cat("
+    model{
+    
+    ## Priors
+    beta ~ dnorm(0, 0.000001)
+    
+    ## Likelihood
+    for(i in 1:N.obs){
+    Num.uninf[i] ~ dbin(prob[i], Num[i])
+    prob[i] <- exp(-beta * 2000 * 20 * 3 * 0.00001) 
+    # 120000 total spore days = 2000 sp/ml x 20 ml x 3 day exposure
+    # the beta parameter value is transformed by x 10^-5 to make fitting easier - need to transform output later
+    }
+    
+    } # close model
+    ",fill=T)
+sink()
+```
+
+# Inits Function
+```{r}
+inits<-function(){list(
+  beta = runif(1, 0, 1))}
+```
+
+
+# Parameters to Estimate
+```{r}
+parameters <- c("beta")
+```
+
+
+# Organize Data for JAGS - store data and run model for one temp at a time
+```{r}
+#C1
+Num <- beta_data_C12020$Total
+Num.uninf <- beta_data_C12020$Uninf
+Num <- beta_data_C12025$Total
+Num.uninf <- beta_data_C12025$Uninf
+Num <- beta_data_C12520$Total
+Num.uninf <- beta_data_C12520$Uninf
+Num <- beta_data_C12525$Total
+Num.uninf <- beta_data_C12525$Uninf
+#C14
+Num <- beta_data_C142020$Total
+Num.uninf <- beta_data_C142020$Uninf
+Num <- beta_data_C142025$Total
+Num.uninf <- beta_data_C142025$Uninf
+Num <- beta_data_C142520$Total
+Num.uninf <- beta_data_C142520$Uninf
+Num <- beta_data_C142525$Total
+Num.uninf <- beta_data_C142525$Uninf
+#C20
+Num <- beta_data_C202020$Total
+Num.uninf <- beta_data_C202020$Uninf
+Num <- beta_data_C202025$Total
+Num.uninf <- beta_data_C202025$Uninf
+Num <- beta_data_C202520$Total
+Num.uninf <- beta_data_C202520$Uninf
+Num <- beta_data_C202525$Total
+Num.uninf <- beta_data_C202525$Uninf
+```
+
+#length
+```{r}
+N.obs <- length(Num.uninf)
+```
+
+# Bundle Data
+```{r}
+jag.data<-list(
+  Num = Num,
+  Num.uninf = Num.uninf,
+  N.obs = N.obs)
+```
+
+#Run JAGS one treatment at a time
+```{r}
+beta_C202525_out<-jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/betamodelsingletemp.txt",
+                  n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+```
+
+```{r}
+beta_C12020_out$BUGSoutput$summary
+beta_C12025_out$BUGSoutput$summary
+beta_C12520_out$BUGSoutput$summary
+beta_C12525_out$BUGSoutput$summary
+
+beta_C142020_out$BUGSoutput$summary
+beta_C142025_out$BUGSoutput$summary
+beta_C142520_out$BUGSoutput$summary
+beta_C142525_out$BUGSoutput$summary
+
+beta_C202020_out$BUGSoutput$summary
+beta_C202025_out$BUGSoutput$summary
+beta_C202520_out$BUGSoutput$summary
+beta_C202525_out$BUGSoutput$summary
+```
+
+```{r}
+mcmcplot(beta_C12020_out)
+mcmcplot(beta_C12025_out)
+mcmcplot(beta_C12520_out)
+mcmcplot(beta_C12525_out)
+
+mcmcplot(beta_C142020_out)
+mcmcplot(beta_C142025_out)
+mcmcplot(beta_C142520_out)
+mcmcplot(beta_C142525_out)
+
+mcmcplot(beta_C202020_out)
+mcmcplot(beta_C202025_out)
+mcmcplot(beta_C202520_out)
+mcmcplot(beta_C202525_out)
+```
+
+DONT FORGET I NEED TO CORRECT THE BETA BY "/(1/0.02)*0.00001" in both the summary and the raw posteriors
+
+#saving summary of beta in data frame
+```{r}
+JAGS_beta_summary <- data.frame(temp_treat = c("20-20", "20-25", "25-20", "25-25", "20-20", "20-25", "25-20", "25-25", "20-20", "20-25", "25-20", "25-25"), 
+                                treatment = c("C1-20-20", "C1-20-25", "C1-25-20", "C1-25-25", "C14-20-20", "C14-20-25", "C14-25-20", "C14-25-25", "C20-20-20", "C20-20-25", "C20-25-20", "C20-25-25"),
+                                median = c(median(beta_C12020_out$BUGSoutput$sims.list$beta), median(beta_C12025_out$BUGSoutput$sims.list$beta), median(beta_C12520_out$BUGSoutput$sims.list$beta), median(beta_C12525_out$BUGSoutput$sims.list$beta), median(beta_C142020_out$BUGSoutput$sims.list$beta), median(beta_C142025_out$BUGSoutput$sims.list$beta), median(beta_C142520_out$BUGSoutput$sims.list$beta), median(beta_C142525_out$BUGSoutput$sims.list$beta), median(beta_C202020_out$BUGSoutput$sims.list$beta), median(beta_C202025_out$BUGSoutput$sims.list$beta), median(beta_C202520_out$BUGSoutput$sims.list$beta), median(beta_C202525_out$BUGSoutput$sims.list$beta)),
+                                mean = c(beta_C12020_out$BUGSoutput$summary[1, 1], beta_C12025_out$BUGSoutput$summary[1, 1], beta_C12520_out$BUGSoutput$summary[1, 1], beta_C12525_out$BUGSoutput$summary[1, 1], beta_C142020_out$BUGSoutput$summary[1, 1], beta_C142025_out$BUGSoutput$summary[1, 1], beta_C142520_out$BUGSoutput$summary[1, 1], beta_C142525_out$BUGSoutput$summary[1, 1], beta_C202020_out$BUGSoutput$summary[1, 1], beta_C202025_out$BUGSoutput$summary[1, 1], beta_C202520_out$BUGSoutput$summary[1, 1], beta_C202525_out$BUGSoutput$summary[1, 1]),
+                                lower = c(beta_C12020_out$BUGSoutput$summary[1, 3], beta_C12025_out$BUGSoutput$summary[1, 3], beta_C12520_out$BUGSoutput$summary[1, 3], beta_C12525_out$BUGSoutput$summary[1, 3], beta_C142020_out$BUGSoutput$summary[1, 3], beta_C142025_out$BUGSoutput$summary[1, 3], beta_C142520_out$BUGSoutput$summary[1, 3], beta_C142525_out$BUGSoutput$summary[1, 3], beta_C202020_out$BUGSoutput$summary[1, 3], beta_C202025_out$BUGSoutput$summary[1, 3], beta_C202520_out$BUGSoutput$summary[1, 3], beta_C202525_out$BUGSoutput$summary[1, 3]),
+                                upper = c(beta_C12020_out$BUGSoutput$summary[1, 7], beta_C12025_out$BUGSoutput$summary[1, 7], beta_C12520_out$BUGSoutput$summary[1, 7], beta_C12525_out$BUGSoutput$summary[1, 7], beta_C142020_out$BUGSoutput$summary[1, 7], beta_C142025_out$BUGSoutput$summary[1, 7], beta_C142520_out$BUGSoutput$summary[1, 7], beta_C142525_out$BUGSoutput$summary[1, 7], beta_C202020_out$BUGSoutput$summary[1, 7], beta_C202025_out$BUGSoutput$summary[1, 7], beta_C202520_out$BUGSoutput$summary[1, 7], beta_C202525_out$BUGSoutput$summary[1, 7]))
+
+JAGS_beta_summary #not corrected for density or 0.00001 yet
+```
+
+#Save beta posteriors for later calculations (untransformed so far)
+```{r}
+JAGS_beta_C12020 <- data.frame(beta = beta_C12020_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C12025 <- data.frame(beta = beta_C12025_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C12520 <- data.frame(beta = beta_C12520_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C12525 <- data.frame(beta = beta_C12525_out$BUGSoutput$sims.list$beta)
+
+JAGS_beta_C142020 <- data.frame(beta = beta_C142020_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C142025 <- data.frame(beta = beta_C142025_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C142520 <- data.frame(beta = beta_C142520_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C142525 <- data.frame(beta = beta_C142525_out$BUGSoutput$sims.list$beta)
+
+JAGS_beta_C202020 <- data.frame(beta = beta_C202020_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C202025 <- data.frame(beta = beta_C202025_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C202520 <- data.frame(beta = beta_C202520_out$BUGSoutput$sims.list$beta)
+JAGS_beta_C202525 <- data.frame(beta = beta_C202525_out$BUGSoutput$sims.list$beta)
+```
+
+
+
+
+
+
+
+#####
+###Spore yields
+#####
+
+Going to run on using spores divided by 100000 (one hundred thousand), need to multiply out to raw units later
+
+# General model for a normally distributed trait (for sigma and r)
+```{r}
+sink("../JAGS_models/traitmumodelsingletemp.txt")
+cat("
+    model{
+    
+    ## Priors
+    trait.mu ~ dnorm(0, 1/1000000000000)
+    trait.sigma ~ dunif(0, 1000)
+    trait.tau <- 1 / (trait.sigma * trait.sigma)
+    
+    ## Likelihood
+    for(i in 1:N.obs.trait){
+    trait[i] ~ dnorm(trait.mu, trait.tau)
+    }
+    
+    } # close model
+    ",fill=T)
+sink()
+```
+
+# Parameters to Estimate
+```{r}
+parameters <- c("trait.mu", "trait.sigma")
+```
+
+#Inits Function
+```{r}
+inits<-function(){list(
+  trait.mu = runif(1, 0, 30),
+  trait.sigma = rlnorm(1))}
+```
+
+#Subset Data by Treatment
+```{r}
+spores_C12020 <- pheno_data %>% filter(treatment == "C1-20-20", infected == "M")
+spores_C12025 <- pheno_data %>% filter(treatment == "C1-20-25", infected == "M")
+spores_C12520 <- pheno_data %>% filter(treatment == "C1-25-20", infected == "M")
+spores_C12525 <- pheno_data %>% filter(treatment == "C1-25-25", infected == "M")
+
+spores_C142020 <- pheno_data %>% filter(treatment == "C14-20-20", infected == "M")
+spores_C142025 <- pheno_data %>% filter(treatment == "C14-20-25", infected == "M")
+spores_C142520 <- pheno_data %>% filter(treatment == "C14-25-20", infected == "M")
+spores_C142525 <- pheno_data %>% filter(treatment == "C14-25-25", infected == "M")
+
+spores_C202020 <- pheno_data %>% filter(treatment == "C20-20-20", infected == "M")
+spores_C202025 <- pheno_data %>% filter(treatment == "C20-20-25", infected == "M")
+spores_C202520 <- pheno_data %>% filter(treatment == "C20-25-20", infected == "M")
+spores_C202525 <- pheno_data %>% filter(treatment == "C20-25-25", infected == "M")
+```
+
+
+
+#Organize Data for JAGS - store data and run model for one temp at a time
+```{r}
+trait <- spores_C12020$mature_spores/100000 
+trait <- spores_C12025$mature_spores/100000 
+trait <- spores_C12520$mature_spores/100000 
+trait <- spores_C12525$mature_spores/100000 
+
+trait <- spores_C142020$mature_spores/100000 
+trait <- spores_C142025$mature_spores/100000 
+trait <- spores_C142520$mature_spores/100000 
+trait <- c(spores_C142525$mature_spores/100000, spores_C142525$mature_spores/100000) 
+
+trait <- spores_C202020$mature_spores/100000 
+trait <- c(spores_C202025$mature_spores/100000, spores_C202025$mature_spores/100000) 
+trait <- spores_C202520$mature_spores/100000 
+trait <- spores_C202525$mature_spores/100000 
+```
+
+#Length
+```{r}
+N.obs.trait <- length(trait)
+```
+
+#Bundle Data
+```{r}
+jag.data<-list(
+  trait = trait,
+  N.obs.trait = N.obs.trait)
+```
+
+#Run JAGS - change name each time you run the model
+```{r}
+spores_C202525_out <- jags(data=jag.data, inits=inits, parameters.to.save=parameters, model.file="../JAGS_models/traitmumodelsingletemp.txt",
+                n.thin=nt, n.chains=nc, n.burnin=nb, n.iter=ni, DIC=T, working.directory=getwd())
+```
+
+# View parameters
+```{r}
+spores_C12020_out$BUGSoutput$summary
+spores_C12025_out$BUGSoutput$summary
+spores_C12520_out$BUGSoutput$summary
+spores_C12525_out$BUGSoutput$summary
+
+spores_C142020_out$BUGSoutput$summary
+spores_C142025_out$BUGSoutput$summary
+spores_C142520_out$BUGSoutput$summary
+spores_C142525_out$BUGSoutput$summary #problem
+
+spores_C202020_out$BUGSoutput$summary
+spores_C202025_out$BUGSoutput$summary #problem
+spores_C202520_out$BUGSoutput$summary
+spores_C202525_out$BUGSoutput$summary
+
+```
+
+#diagnostics
+```{r}
+mcmcplot(spores_C12020_out)
+mcmcplot(spores_C12025_out)
+mcmcplot(spores_C12520_out)
+mcmcplot(spores_C12525_out)
+
+mcmcplot(spores_C142020_out)
+mcmcplot(spores_C142025_out)
+mcmcplot(spores_C142520_out)
+mcmcplot(spores_C142525_out) #problem (only 5 infected)
+
+mcmcplot(spores_C202020_out)
+mcmcplot(spores_C202025_out) #problem (only 4 infected)
+mcmcplot(spores_C202520_out)
+mcmcplot(spores_C202525_out)
+```
+
+#Summary table of spore output (not corrected for transformation) - means might be more informative here than medians. In two cases the medians are way too high (C1-25-25 & C14-25-25)
+```{r}
+JAGS_spores_summary <- data.frame(treatment = c("C1-20-20", "C1-20-25", "C1-25-20", "C1-25-25", "C14-20-20", "C14-20-25", "C14-25-20", "C14-25-25", "C20-20-20", "C20-20-25", "C20-25-20", "C20-25-25"), 
+                                  median = c(median(spores_C12020_out$BUGSoutput$sims.list$trait.mu), median(spores_C12025_out$BUGSoutput$sims.list$trait.mu), median(spores_C12520_out$BUGSoutput$sims.list$trait.mu), median(spores_C12025_out$BUGSoutput$sims.list$trait.mu), median(spores_C142020_out$BUGSoutput$sims.list$trait.mu), median(spores_C142025_out$BUGSoutput$sims.list$trait.mu), median(spores_C142520_out$BUGSoutput$sims.list$trait.mu), median(spores_C142025_out$BUGSoutput$sims.list$trait.mu), median(spores_C202020_out$BUGSoutput$sims.list$trait.mu), median(spores_C202025_out$BUGSoutput$sims.list$trait.mu), median(spores_C202520_out$BUGSoutput$sims.list$trait.mu), median(spores_C202025_out$BUGSoutput$sims.list$trait.mu)),
+                                  mean = c(spores_C12020_out$BUGSoutput$summary[2, 1], spores_C12025_out$BUGSoutput$summary[2, 1], spores_C12520_out$BUGSoutput$summary[2, 1], spores_C12525_out$BUGSoutput$summary[2, 1], spores_C142020_out$BUGSoutput$summary[2, 1], spores_C142025_out$BUGSoutput$summary[2, 1], spores_C142520_out$BUGSoutput$summary[2, 1], spores_C142525_out$BUGSoutput$summary[2, 1], spores_C202020_out$BUGSoutput$summary[2, 1], spores_C202025_out$BUGSoutput$summary[2, 1], spores_C202520_out$BUGSoutput$summary[2, 1], spores_C202525_out$BUGSoutput$summary[2, 1]),
+                                  lower = c(spores_C12020_out$BUGSoutput$summary[2, 3], spores_C12025_out$BUGSoutput$summary[2, 3], spores_C12520_out$BUGSoutput$summary[2, 3], spores_C12525_out$BUGSoutput$summary[2, 3], spores_C142020_out$BUGSoutput$summary[2, 3], spores_C142025_out$BUGSoutput$summary[2, 3], spores_C142520_out$BUGSoutput$summary[2, 3], spores_C142525_out$BUGSoutput$summary[2, 3], spores_C202020_out$BUGSoutput$summary[2, 3], spores_C202025_out$BUGSoutput$summary[2, 3], spores_C202520_out$BUGSoutput$summary[2, 3], spores_C202525_out$BUGSoutput$summary[2, 3]),
+                                  upper = c(spores_C12020_out$BUGSoutput$summary[2, 7], spores_C12025_out$BUGSoutput$summary[2, 7], spores_C12520_out$BUGSoutput$summary[2, 7], spores_C12525_out$BUGSoutput$summary[2, 7], spores_C142020_out$BUGSoutput$summary[2, 7], spores_C142025_out$BUGSoutput$summary[2, 7], spores_C142520_out$BUGSoutput$summary[2, 7], spores_C142525_out$BUGSoutput$summary[2, 7], spores_C202020_out$BUGSoutput$summary[2, 7], spores_C202025_out$BUGSoutput$summary[2, 7], spores_C202520_out$BUGSoutput$summary[2, 7], spores_C202525_out$BUGSoutput$summary[2, 7]))
+
+JAGS_spores_summary
+```
+
+#Saving raw posteriors for later derived parameter calculations
+```{r}
+JAGS_spores_C12020 <- data.frame(spore_load = spores_C12020_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C12025 <- data.frame(spore_load = spores_C12025_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C12520 <- data.frame(spore_load = spores_C12520_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C12525 <- data.frame(spore_load = spores_C12525_out$BUGSoutput$sims.list$trait.mu)
+
+JAGS_spores_C142020 <- data.frame(spore_load = spores_C142020_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C142025 <- data.frame(spore_load = spores_C142025_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C142520 <- data.frame(spore_load = spores_C142520_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C142525 <- data.frame(spore_load = spores_C142525_out$BUGSoutput$sims.list$trait.mu)
+
+JAGS_spores_C202020 <- data.frame(spore_load = spores_C202020_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C202025 <- data.frame(spore_load = spores_C202025_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C202520 <- data.frame(spore_load = spores_C202520_out$BUGSoutput$sims.list$trait.mu)
+JAGS_spores_C202525 <- data.frame(spore_load = spores_C202525_out$BUGSoutput$sims.list$trait.mu)
+```
+
+
+
+
+###############
+####Merging posteriors and calculating derived parameters
+##############
+
+##First combine posteriors of death rate (little d) and intrinsic rate of increase (little r) and calculate birth rate (little b), where b = r + d
+
+#Merge posteriors for little r and little d and calculate little b
+```{r}
+JAGS_birth_death_2020 <- data.frame(temp_treat = "20-20", JAGS_little_r_2020, JAGS_little_d_2020) %>%
+  mutate(little_b = little_r + little_d)
+
+JAGS_birth_death_2025 <- data.frame(temp_treat = "20-25", JAGS_little_r_2025, JAGS_little_d_2025) %>%
+  mutate(little_b = little_r + little_d)
+
+JAGS_birth_death_2520 <- data.frame(temp_treat = "25-20", JAGS_little_r_2520, JAGS_little_d_2520) %>%
+  mutate(little_b = little_r + little_d)
+
+JAGS_birth_death_2525 <- data.frame(temp_treat = "25-25", JAGS_little_r_2525, JAGS_little_d_2525) %>%
+  mutate(little_b = little_r + little_d)
+```
+
+#Combine uninfected parameter data frames for later saving
+```{r}
+JAGS_birth_death_full <- bind_rows(JAGS_birth_death_2020, JAGS_birth_death_2025, JAGS_birth_death_2520, JAGS_birth_death_2525)
+
+JAGS_birth_death_full
+```
+
+
+#For each pathogen genotype by temp treat combination, combining birth/death, beta & spore posteriors 
+```{r}
+JAGS_data_C12020 <- data.frame(treatment = "C1-20-20", JAGS_birth_death_2020, JAGS_beta_C12020, JAGS_spores_C12020)
+JAGS_data_C12025 <- data.frame(treatment = "C1-20-25", JAGS_birth_death_2025, JAGS_beta_C12025, JAGS_spores_C12025)
+JAGS_data_C12520 <- data.frame(treatment = "C1-25-20", JAGS_birth_death_2520, JAGS_beta_C12520, JAGS_spores_C12520)
+JAGS_data_C12525 <- data.frame(treatment = "C1-25-25", JAGS_birth_death_2525, JAGS_beta_C12525, JAGS_spores_C12525)
+
+JAGS_data_C142020 <- data.frame(treatment = "C14-20-20", JAGS_birth_death_2020, JAGS_beta_C142020, JAGS_spores_C142020)
+JAGS_data_C142025 <- data.frame(treatment = "C14-20-25", JAGS_birth_death_2025, JAGS_beta_C142025, JAGS_spores_C142025)
+JAGS_data_C142520 <- data.frame(treatment = "C14-25-20", JAGS_birth_death_2520, JAGS_beta_C142520, JAGS_spores_C142520)
+JAGS_data_C142525 <- data.frame(treatment = "C14-25-25", JAGS_birth_death_2525, JAGS_beta_C142525, JAGS_spores_C142525)
+
+JAGS_data_C202020 <- data.frame(treatment = "C20-20-20", JAGS_birth_death_2020, JAGS_beta_C202020, JAGS_spores_C202020)
+JAGS_data_C202025 <- data.frame(treatment = "C20-20-25", JAGS_birth_death_2025, JAGS_beta_C202025, JAGS_spores_C202025)
+JAGS_data_C202520 <- data.frame(treatment = "C20-25-20", JAGS_birth_death_2520, JAGS_beta_C202520, JAGS_spores_C202520)
+JAGS_data_C202525 <- data.frame(treatment = "C20-25-25", JAGS_birth_death_2525, JAGS_beta_C202525, JAGS_spores_C202525)
+```
+
+#Bind all datasets (rows) together for each pathgogen by temp treatment
+```{r}
+JAGS_full_data0 <- bind_rows(JAGS_data_C12020, JAGS_data_C12025, JAGS_data_C12520, JAGS_data_C12525, JAGS_data_C142020, JAGS_data_C142025, JAGS_data_C142520, JAGS_data_C142525, JAGS_data_C202020, JAGS_data_C202025, JAGS_data_C202520, JAGS_data_C202525)
+
+JAGS_full_data0$temp_treat <- as_factor(JAGS_full_data0$temp_treat)
+JAGS_full_data0$treatment <- as_factor(JAGS_full_data0$treatment)
+
+glimpse(JAGS_full_data0)
+```
+
+#correcting units for beta and spore load
+#beta needs to be corrected for units (so it is per L) and also transformed by 0.00001 which we used for fitting. 
+#spores are currently in per 100000 units, need to convert to raw units
+#also adding constants to the data: carrying capacity (c = 0.01) & spore degradation rate (m = 0.9) - Clay (2019) Within-Host Priority Effects Systematically Alter Pathogen Coexistence have measures of Pasteuria degredation between 0.0032 – 0.47. Could try setting to ~ 0.5 instead of 0.9
+#finally for each row calculate the R0 value. R0 in our model is: R0 = ((b-d)/(bc))*((spores*beta)/m)
+```{r}
+JAGS_full_data <- JAGS_full_data0 %>%
+  mutate(beta = beta/(1/0.02)*0.00001) %>%
+  mutate(spore_load = spore_load*100000) %>%
+  mutate(c = 0.01) %>%
+  mutate(m = 0.9) %>%
+  mutate(R0 = ((little_b - little_d)/(little_b * c)) * ((spore_load * beta)/m))
+
+JAGS_full_data
+```
+
+#Saving JAGS birth/death (control) posteriors
+#Saving JAGS pathogen R0 posteriors
+```{r}
+write_csv(JAGS_birth_death_full, "../data/JAGS_birth_death_post_full.csv")
+
+write_csv(JAGS_full_data, "../data/JAGS_R0_derived_post_full.csv")
+```

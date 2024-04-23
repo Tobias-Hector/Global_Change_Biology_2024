@@ -1,0 +1,15 @@
+
+    model{
+    
+    ## Priors
+    trait.mu ~ dnorm(0, 1/1000000000000)
+    trait.sigma ~ dunif(0, 1000)
+    trait.tau <- 1 / (trait.sigma * trait.sigma)
+    
+    ## Likelihood
+    for(i in 1:N.obs.trait){
+    trait[i] ~ dlnorm(trait.mu, trait.tau)
+    }
+    
+    } # close model
+    

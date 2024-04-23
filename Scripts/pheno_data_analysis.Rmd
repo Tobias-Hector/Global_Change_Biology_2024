@@ -1,0 +1,204 @@
+---
+title: "Individual phenotypic trait analysis"
+---
+
+## Packages
+
+```{r}
+library(tidyverse)
+library(broom)
+library(nlme)
+library(car)
+library(MASS)
+library(emmeans)
+library(DHARMa)
+```
+
+# Notes
+
+In the data used here "mat_temp" is the maternal acclimation treatment, and "acc_temp" is the focal acclimation treatment.  
+
+
+## Heat tolerance (knockdown time)
+
+data 
+
+```{r}
+heat_data <- read_csv("../data/final_heat_data.csv", 
+                      col_names = TRUE,
+                      col_types = list(host = col_factor("M"),
+                                       pathogen = col_factor(levels = c("CTRL", "C1", "C14", "C20")),
+                                       temp_treat = col_factor(levels = c("20-20", "20-25", "25-20", "25-25")),
+                                       mat_temp = col_factor(levels = c("20", "25")),
+                                       acc_temp = col_factor(levels = c("20", "25")),
+                                       run = col_factor(levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12")))) 
+
+heat_data
+```
+
+Manually setting contrasts
+
+```{r}
+heat_data2 <- heat_data %>% 
+  mutate(mat_acc_cont = mat_temp,
+         acc_temp_cont = acc_temp,
+         pathogen_cont = pathogen)
+
+contrasts(heat_data2$mat_acc_cont) = contr.sum(2)
+contrasts(heat_data2$acc_temp_cont) = contr.sum(2)
+contrasts(heat_data2$pathogen_cont) = contr.sum(4)
+```
+
+
+Model
+
+```{r echo=TRUE}
+heat_mod <- lme(death_time ~ mat_acc_cont * acc_temp_cont * pathogen_cont, random = ~1|run, method = "REML", weights = varIdent(form = ~1|acc_temp), data = heat_data2)
+```
+
+
+```{r}
+#plot(heat_mod)
+#qqnorm(heat_mod$residuals)
+#aa <- augment(heat_mod_3)
+#ggplot(aa,aes(acc_temp,.resid))+
+#    geom_boxplot()+coord_flip()
+```
+
+```{r}
+summary(heat_mod)
+```
+
+```{r}
+Anova(heat_mod, type = 3)
+```
+
+
+
+# Fitness traits
+
+### data 
+
+```{r}
+pheno_data <- read_csv("../data/final_phenotype_data.csv",
+                      col_names = TRUE,
+                      col_types = list(host = col_factor(NULL),
+                                       pathogen = col_factor(levels = c("CTRL", "C1", "C14", "C20")),
+                                       temp_treat = col_factor(levels = c("20-20", "25-20", "20-25", "25-25")),
+                                       mat_temp = col_factor(levels = c("20", "25")),
+                                       acc_temp = col_factor(levels = c("20", "25")),
+                                       treatment = col_factor(NULL),
+                                       exposed = col_factor(NULL),
+                                       infected = col_factor(NULL)))
+
+glimpse(pheno_data)
+```
+
+
+## Host Lifespan 
+
+Model 
+
+```{r}
+lifespan_lm <- lm(log(lifespan_days) ~ mat_temp * acc_temp * pathogen, contrasts = list(mat_temp = contr.Sum, acc_temp = contr.Sum, pathogen = contr.Sum), data = pheno_data)
+```
+
+```{r}
+#plot(lifespan_lm)
+```
+
+Hypothesis test
+
+```{r}
+Anova(lifespan_lm, type = 3, white.adjust = TRUE)
+```
+
+
+## Host Lifetime Fecundity
+
+```{r}
+fecundity_lm <- lm(log(total_offspring) ~ mat_temp * acc_temp * pathogen, contrasts = list(mat_temp = contr.Sum, acc_temp = contr.Sum, pathogen = contr.Sum), data = pheno_data)
+```
+
+
+```{r}
+Anova(fecundity_lm, type = 3, white.adjust = TRUE)
+```
+
+
+## Pathogen Spore Loads
+
+Subsetting only hosts infected with mature transmission spores
+
+```{r}
+mature_spore_data <- pheno_data %>% filter(pathogen != "CTRL" & infected == "M")
+```
+
+```{r}
+mature_spore_lm <- lm(mature_spores ~ mat_temp * acc_temp * pathogen, contrasts = list(mat_temp = contr.Sum, acc_temp = contr.Sum, pathogen = contr.Sum), data = mature_spore_data)
+```
+
+```{r}
+#plot(mature_spore_lm)
+```
+
+```{r}
+Anova(mature_spore_lm, type = 3, white.adjust = TRUE)
+```
+
+
+## Pathogen infection success
+
+Coding individuals so they are yes or no for infections with mature spores
+```{r}
+infection_data <- pheno_data %>% filter(pathogen != "CTRL" & !is.na(infected)) %>%
+  mutate(mature_spores_yn = as.numeric(case_when(infected == "M" ~ "1", TRUE ~ "0")))
+```
+
+For treatments with 100% infection, making one individual uninfected to allow for proper estimation of errors
+
+C20-20-20- 100% for all spores and mature spores
+```{r}
+C20_2020_binom <- infection_data %>%
+  filter(treatment == "C20-20-20") %>%
+  mutate(mature_spores_yn = as.numeric(case_when(indv_id == "C20-20-20-34" ~ "0", TRUE ~ "1")))
+```
+
+removing old data and then joining above data
+```{r}
+infection_data_ammended <- infection_data %>% 
+  filter(treatment != "C20-20-20") %>%
+  bind_rows(C20_2020_binom)
+
+infection_data_ammended
+```
+
+
+binomial glm for mature spores (Y/N)
+
+```{r}
+infect_rate_ms_glm <- glm(mature_spores_yn ~ mat_temp * acc_temp * pathogen, contrasts = list(mat_temp = contr.Sum, acc_temp = contr.Sum, pathogen = contr.Sum), family = binomial(link = "logit"), data = infection_data_ammended)
+```
+
+```{r}
+glm_inf_sim <- simulateResiduals(fittedModel = infect_rate_ms_glm, plot = TRUE)
+```
+
+
+```{r}
+Anova(infect_rate_ms_glm, type = 3)
+```
+
+Calculating mean (probability) and SE
+```{r}
+mean_inf_rate_ms <- as_tibble(emmeans(infect_rate_ms_glm, ~ mat_temp * acc_temp * pathogen, trans = "response")) %>%
+  unite(treat_temp, acc_temp, mat_temp, sep = "-", remove = FALSE)
+
+mean_inf_rate_ms
+```
+
+
+```{r}
+#write_csv(mean_inf_rate_ms, "../data/infection_prob_data.csv")
+```
+
