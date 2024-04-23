@@ -3,6 +3,8 @@ Data and code for the manuscript: 'Acclimation to warmer temperatures can protec
 
 Citation: Hector, T. E., Shocket, M. S., Sgrò, C. M., & Hall, M. D. (2024) Acclimation to warmer temperatures can protect host populations from both further heat stress and the potential invasion of pathogens. *Global Change Biology*, XXX.
 
+[![DOI](https://zenodo.org/badge/790105956.svg)](https://zenodo.org/doi/10.5281/zenodo.11045834)
+
 ## Details
 
 ALl data and code necessary to reproduce the analysis and figures in the manuscript is included. Raw data and posterior samples from models can be found in /data.
